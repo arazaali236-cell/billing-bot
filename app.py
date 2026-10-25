@@ -219,4 +219,4 @@ if q:
         if "429" in msg or "quota" in msg or "exhausted" in msg:
             st.warning("The free daily limit has been reached. Please try again later.")
         else:
-            st.error("Something went wrong. Please send your question again in a minute.")
+                       st.error(f"Error: {e}")
