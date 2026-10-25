@@ -22,7 +22,7 @@ if "msgs" not in st.session_state:
 st.title("Billing Helper Bot")
 st.caption("Denial codes, appeals, and billing questions answered step by step")
 st.warning("Please do not enter patient names, DOB, or claim numbers here.")
-st.markdown("Need billing support? [Fill out this form](PASTE_LINK_HEREhttps://docs.google.com/forms/d/e/1FAIpQLSeVq8d9kuNkDJTOLO0z6XncwswpTuQkhFvhsuY5-GoJUQL3VA/viewform?usp=publish-editor)")
+st.markdown("Need billing support? [Fill out this form](https://docs.google.com/forms/d/e/1FAIpQLSeVq8d9kuNkDJTOLO0z6XncwswpTuQkhFvhsuY5-GoJUQL3VA/viewform?usp=publish-editor)")
 
 for role, text in st.session_state.msgs:
     with st.chat_message(role):
