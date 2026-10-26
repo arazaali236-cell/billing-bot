@@ -1,10 +1,11 @@
 import json
+import time
 import streamlit as st
 from google import genai
 from google.genai import types
 from streamlit_local_storage import LocalStorage
-import time
-FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSeVq8d9kuNkDJTOLO0z6XncwswpTuQkhFvhsuY5-GoJUQL3VA/viewform?usp=publish-editor"
+
+FORM_URL = "PASTE_FORM_LINK_HERE"
 MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"]
 STORE_KEY = "billing_bot_chat"
 
@@ -95,17 +96,6 @@ if "loaded" not in st.session_state:
     st.session_state.loaded = False
 
 
-def set_pending(text):
-    st.session_state.pending = text
-
-
-def clear_chat():
-    st.session_state.msgs = []
-    st.session_state.pending = None
-    st.session_state.loaded = True
-    save_chat()
-
-
 def save_chat():
     if localS is None:
         return
@@ -128,6 +118,17 @@ def load_chat():
         pass
 
 
+def set_pending(text):
+    st.session_state.pending = text
+
+
+def clear_chat():
+    st.session_state.msgs = []
+    st.session_state.pending = None
+    st.session_state.loaded = True
+    save_chat()
+
+
 def build_history(msgs):
     cleaned = []
     for r, t in msgs[-20:]:
@@ -144,6 +145,11 @@ def build_history(msgs):
         )
         for r, t in cleaned
     ]
+
+
+def can_try_next(err):
+    words = ["503", "unavailable", "overloaded", "high demand", "404", "not_found", "no longer available"]
+    return any(w in err for w in words)
 
 
 load_chat()
@@ -197,19 +203,6 @@ if st.session_state.pending:
     st.session_state.pending = None
 
 if q:
-    def can_try_next(err):
-    return (
-        "503" in err
-        or "unavailable" in err
-        or "overloaded" in err
-        or "high demand" in err
-        or "404" in err
-        or "not_found" in err
-        or "no longer available" in err
-    )
-
-
-if q:
     st.session_state.loaded = True
     st.session_state.msgs.append(("user", q))
     with st.chat_message("user"):
@@ -225,28 +218,3 @@ if q:
                         model=model_name,
                         contents=build_history(st.session_state.msgs),
                         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
-                    )
-                    reply = resp.text or "I could not generate an answer. Please rephrase your question."
-                    break
-                except Exception as e:
-                    last_error = str(e).lower()
-                    if attempt == 0 and can_try_next(last_error):
-                        time.sleep(3)
-                        continue
-                    break
-            if reply or not can_try_next(last_error):
-                break
-
-    if reply:
-        st.session_state.msgs.append(("assistant", reply))
-        with st.chat_message("assistant"):
-            st.write(reply)
-        save_chat()
-    else:
-        st.session_state.msgs.pop()
-        if "429" in last_error or "quota" in last_error or "exhausted" in last_error:
-            st.warning("The free daily limit has been reached. Please try again later.")
-        elif can_try_next(last_error):
-            st.warning("The AI servers are busy right now. Please try again in a minute.")
-        else:
-            st.error("Something went wrong. Please send your question again in a minute.")
