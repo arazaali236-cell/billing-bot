@@ -1,5 +1,4 @@
 import json
-import time
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -144,11 +143,13 @@ def can_try_next(err):
     return any(w in err for w in BUSY_WORDS)
 
 
-def ask_model(model_name):
+def stream_model(model_name):
     history = build_history(st.session_state.msgs)
     cfg = types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
-    resp = client.models.generate_content(model=model_name, contents=history, config=cfg)
-    return resp.text
+    stream = client.models.generate_content_stream(model=model_name, contents=history, config=cfg)
+    for chunk in stream:
+        if chunk.text:
+            yield chunk.text
 
 
 load_chat()
@@ -188,25 +189,20 @@ if q:
 
     reply = None
     last_error = ""
-    with st.spinner("Thinking..."):
+    with st.chat_message("assistant"):
         for model_name in MODELS:
-            for attempt in range(2):
-                try:
-                    reply = ask_model(model_name) or "I could not generate an answer. Please rephrase your question."
+            try:
+                reply = st.write_stream(stream_model(model_name))
+                if reply:
                     break
-                except Exception as e:
-                    last_error = str(e).lower()
-                    if attempt == 0 and can_try_next(last_error):
-                        time.sleep(3)
-                        continue
+            except Exception as e:
+                last_error = str(e).lower()
+                reply = None
+                if not can_try_next(last_error):
                     break
-            if reply or not can_try_next(last_error):
-                break
 
     if reply:
         st.session_state.msgs.append(("assistant", reply))
-        with st.chat_message("assistant"):
-            st.write(reply)
         save_chat()
     else:
         st.session_state.msgs.pop()
