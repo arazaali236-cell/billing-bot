@@ -3,9 +3,9 @@ import streamlit as st
 from google import genai
 from google.genai import types
 from streamlit_local_storage import LocalStorage
-
+import time
 FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSeVq8d9kuNkDJTOLO0z6XncwswpTuQkhFvhsuY5-GoJUQL3VA/viewform?usp=publish-editor"
-MODEL = "gemini-3.8-flash"
+MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"]
 STORE_KEY = "billing_bot_chat"
 
 st.set_page_config(page_title="Billing Helper Bot", page_icon="🩺", layout="centered")
@@ -197,26 +197,56 @@ if st.session_state.pending:
     st.session_state.pending = None
 
 if q:
+    def can_try_next(err):
+    return (
+        "503" in err
+        or "unavailable" in err
+        or "overloaded" in err
+        or "high demand" in err
+        or "404" in err
+        or "not_found" in err
+        or "no longer available" in err
+    )
+
+
+if q:
     st.session_state.loaded = True
     st.session_state.msgs.append(("user", q))
     with st.chat_message("user"):
         st.write(q)
 
-    try:
-        resp = client.models.generate_content(
-            model=MODEL,
-            contents=build_history(st.session_state.msgs),
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
-        )
-        reply = resp.text or "I could not generate an answer. Please rephrase your question."
+    reply = None
+    last_error = ""
+    with st.spinner("Thinking..."):
+        for model_name in MODELS:
+            for attempt in range(2):
+                try:
+                    resp = client.models.generate_content(
+                        model=model_name,
+                        contents=build_history(st.session_state.msgs),
+                        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+                    )
+                    reply = resp.text or "I could not generate an answer. Please rephrase your question."
+                    break
+                except Exception as e:
+                    last_error = str(e).lower()
+                    if attempt == 0 and can_try_next(last_error):
+                        time.sleep(3)
+                        continue
+                    break
+            if reply or not can_try_next(last_error):
+                break
+
+    if reply:
         st.session_state.msgs.append(("assistant", reply))
         with st.chat_message("assistant"):
             st.write(reply)
         save_chat()
-    except Exception as e:
+    else:
         st.session_state.msgs.pop()
-        msg = str(e).lower()
-        if "429" in msg or "quota" in msg or "exhausted" in msg:
+        if "429" in last_error or "quota" in last_error or "exhausted" in last_error:
             st.warning("The free daily limit has been reached. Please try again later.")
+        elif can_try_next(last_error):
+            st.warning("The AI servers are busy right now. Please try again in a minute.")
         else:
-                       st.error(f"Error: {e}")
+            st.error("Something went wrong. Please send your question again in a minute.")
